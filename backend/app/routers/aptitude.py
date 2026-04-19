@@ -1,6 +1,8 @@
+import os
+import uuid
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -11,6 +13,29 @@ from app.schemas import (
 )
 
 router = APIRouter()
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "aptitude")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@router.post("/upload")
+def upload_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".gif", ".pdf", ".webp"]:
+        raise HTTPException(status_code=400, detail="仅支持图片或 PDF 格式")
+
+    file_id = str(uuid.uuid4())
+    filename = f"{file_id}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(file.file.read())
+
+    return {"url": f"/uploads/aptitude/{filename}"}
 
 
 @router.post("/questions", response_model=AptitudeQuestionResponse)

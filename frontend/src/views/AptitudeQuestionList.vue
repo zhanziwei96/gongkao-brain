@@ -12,7 +12,7 @@
       </router-link>
     </div>
 
-    <div class="flex gap-2 mb-6">
+    <div class="flex gap-2 mb-6 flex-wrap">
       <button
         v-for="type in questionTypes"
         :key="type"
@@ -49,7 +49,21 @@
                 难度 {{ q.difficulty }}
               </span>
             </div>
-            <p class="text-near-black text-base mb-3">{{ q.question_text }}</p>
+
+            <!-- 图片预览 -->
+            <div v-if="q.question_image_url" class="mb-3">
+              <img :src="q.question_image_url" class="max-h-40 rounded-container border border-light-gray" />
+            </div>
+
+            <!-- PDF 标识 -->
+            <div v-if="q.question_pdf_url" class="flex items-center gap-2 mb-3 text-near-black">
+              <svg class="w-5 h-5 text-stone" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <a :href="q.question_pdf_url" target="_blank" class="text-sm underline">查看 PDF</a>
+            </div>
+
+            <p v-if="q.question_text" class="text-near-black text-base mb-3">{{ q.question_text }}</p>
             <div v-if="q.options" class="grid grid-cols-2 gap-2 mb-3">
               <div
                 v-for="(val, key) in q.options"

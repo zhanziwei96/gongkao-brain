@@ -5,8 +5,60 @@
     </h1>
 
     <form @submit.prevent="handleSubmit" class="space-y-6">
+      <!-- 文件上传 -->
       <div>
-        <label class="block text-sm text-near-black mb-2">题型</label>
+        <label class="block text-sm text-near-black mb-2">题目文件（图片或 PDF）</label>
+        <div
+          @click="triggerFileInput"
+          @drop.prevent="handleDrop"
+          @dragover.prevent="dragOver = true"
+          @dragleave.prevent="dragOver = false"
+          :class="[
+            'w-full border-2 border-dashed rounded-container p-8 text-center cursor-pointer transition-colors',
+            dragOver ? 'border-pure-black bg-snow' : 'border-light-gray bg-pure-white'
+          ]"
+        >
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/*,.pdf"
+            class="hidden"
+            @change="handleFileSelect"
+          />
+          <div v-if="!previewUrl && !pdfName">
+            <svg class="w-8 h-8 mx-auto mb-3 text-stone" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p class="text-stone text-sm">点击或拖拽上传图片 / PDF</p>
+          </div>
+          <div v-else-if="previewUrl" class="relative">
+            <img :src="previewUrl" class="max-h-48 mx-auto rounded-container" />
+            <button
+              type="button"
+              @click.stop="clearFile"
+              class="absolute top-2 right-2 w-6 h-6 bg-pure-black text-pure-white rounded-full text-xs flex items-center justify-center"
+            >
+              &times;
+            </button>
+          </div>
+          <div v-else-if="pdfName" class="flex items-center justify-center gap-2 text-near-black">
+            <svg class="w-6 h-6 text-stone" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            <span class="text-sm">{{ pdfName }}</span>
+            <button
+              type="button"
+              @click.stop="clearFile"
+              class="ml-2 w-5 h-5 bg-pure-black text-pure-white rounded-full text-xs flex items-center justify-center"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm text-near-black mb-2">题型 <span class="text-stone">*</span></label>
         <select
           v-model="form.question_type"
           required
@@ -22,7 +74,7 @@
         <textarea
           v-model="form.question_text"
           rows="4"
-          placeholder="输入题目内容..."
+          placeholder="可手动输入或补充题目文字内容..."
           class="w-full px-5 py-3 bg-pure-white border border-light-gray rounded-container text-near-black text-base placeholder-silver focus:outline-none focus:ring-2 focus:ring-[#3b82f6] focus:ring-opacity-50 resize-none"
         />
       </div>
@@ -100,13 +152,81 @@ const form = reactive<{
   options: Record<string, string>
   correct_answer: string
   difficulty: number
+  question_image_url: string
+  question_pdf_url: string
 }>({
   question_type: '',
   question_text: '',
   options: { A: '', B: '', C: '', D: '' },
   correct_answer: '',
   difficulty: 3,
+  question_image_url: '',
+  question_pdf_url: '',
 })
+
+const fileInput = ref<HTMLInputElement>()
+const dragOver = ref(false)
+const previewUrl = ref('')
+const pdfName = ref('')
+const uploadedFileUrl = ref('')
+
+const triggerFileInput = () => {
+  fileInput.value?.click()
+}
+
+const handleFileSelect = async (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    await processFile(target.files[0])
+  }
+}
+
+const handleDrop = async (e: DragEvent) => {
+  dragOver.value = false
+  if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
+    await processFile(e.dataTransfer.files[0])
+  }
+}
+
+const processFile = async (file: File) => {
+  if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+    alert('仅支持图片或 PDF 格式')
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    const res = await client.post('/aptitude/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    uploadedFileUrl.value = res.data.url
+
+    if (file.type.startsWith('image/')) {
+      previewUrl.value = URL.createObjectURL(file)
+      form.question_image_url = res.data.url
+      form.question_pdf_url = ''
+      pdfName.value = ''
+    } else {
+      pdfName.value = file.name
+      form.question_pdf_url = res.data.url
+      form.question_image_url = ''
+      previewUrl.value = ''
+    }
+  } catch (err: any) {
+    alert(err.response?.data?.detail || '上传失败')
+  }
+}
+
+const clearFile = () => {
+  previewUrl.value = ''
+  pdfName.value = ''
+  uploadedFileUrl.value = ''
+  form.question_image_url = ''
+  form.question_pdf_url = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
 
 onMounted(async () => {
   if (route.params.id) {
@@ -120,6 +240,14 @@ onMounted(async () => {
       form.options = q.options || { A: '', B: '', C: '', D: '' }
       form.correct_answer = q.correct_answer || ''
       form.difficulty = q.difficulty || 3
+      form.question_image_url = q.question_image_url || ''
+      form.question_pdf_url = q.question_pdf_url || ''
+      if (q.question_image_url) {
+        previewUrl.value = q.question_image_url
+      }
+      if (q.question_pdf_url) {
+        pdfName.value = '已上传的 PDF'
+      }
     } catch (err) {
       alert('加载题目失败')
       router.push('/aptitude/questions')
@@ -130,8 +258,13 @@ onMounted(async () => {
 const handleSubmit = async () => {
   try {
     const payload = {
-      ...form,
-      options: Object.fromEntries(Object.entries(form.options).filter(([, v]) => v))
+      question_type: form.question_type,
+      question_text: form.question_text,
+      options: Object.fromEntries(Object.entries(form.options).filter(([, v]) => v)),
+      correct_answer: form.correct_answer,
+      difficulty: form.difficulty,
+      question_image_url: form.question_image_url,
+      question_pdf_url: form.question_pdf_url,
     }
     if (isEdit.value) {
       await client.put(`/aptitude/questions/${questionId.value}`, payload)

@@ -37,6 +37,7 @@ class AptitudeQuestionBase(BaseModel):
     question_type: str
     question_text: Optional[str] = None
     question_image_url: Optional[str] = None
+    question_pdf_url: Optional[str] = None
     options: Optional[Dict[str, str]] = None
     correct_answer: Optional[str] = None
     difficulty: Optional[int] = 3

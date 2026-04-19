@@ -29,6 +29,7 @@ class AptitudeQuestion(Base):
     question_type = Column(String(20), nullable=False)
     question_text = Column(Text)
     question_image_url = Column(String(500))
+    question_pdf_url = Column(String(500))
     options = Column(JSON, default=dict)
     correct_answer = Column(String(10))
     difficulty = Column(Integer, default=3)
