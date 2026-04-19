@@ -38,6 +38,38 @@ def upload_file(
     return {"url": f"/uploads/aptitude/{filename}"}
 
 
+@router.post("/parse")
+async def parse_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """上传图片/PDF，调用AI解析题目内容"""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".gif", ".pdf", ".webp"]:
+        raise HTTPException(status_code=400, detail="仅支持图片或 PDF 格式")
+
+    file_id = str(uuid.uuid4())
+    filename = f"{file_id}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(file.file.read())
+
+    try:
+        from app.services.ocr_service import parse_image, parse_pdf
+        if ext == ".pdf":
+            result = await parse_pdf(file_path)
+        else:
+            result = await parse_image(file_path)
+        result["file_url"] = f"/uploads/aptitude/{filename}"
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+
 @router.post("/questions", response_model=AptitudeQuestionResponse)
 def create_question(
     data: AptitudeQuestionCreate,

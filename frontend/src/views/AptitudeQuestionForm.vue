@@ -9,13 +9,14 @@
       <div>
         <label class="block text-sm text-near-black mb-2">题目文件（图片或 PDF）</label>
         <div
-          @click="triggerFileInput"
+          @click="!isParsing && triggerFileInput()"
           @drop.prevent="handleDrop"
           @dragover.prevent="dragOver = true"
           @dragleave.prevent="dragOver = false"
           :class="[
             'w-full border-2 border-dashed rounded-container p-8 text-center cursor-pointer transition-colors',
-            dragOver ? 'border-pure-black bg-snow' : 'border-light-gray bg-pure-white'
+            dragOver ? 'border-pure-black bg-snow' : 'border-light-gray bg-pure-white',
+            isParsing ? 'opacity-60 cursor-not-allowed' : ''
           ]"
         >
           <input
@@ -24,12 +25,21 @@
             accept="image/*,.pdf"
             class="hidden"
             @change="handleFileSelect"
+            :disabled="isParsing"
           />
-          <div v-if="!previewUrl && !pdfName">
+          <div v-if="isParsing" class="text-stone">
+            <svg class="w-8 h-8 mx-auto mb-3 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <p class="text-sm">AI 解析中，请稍候...</p>
+          </div>
+          <div v-else-if="!previewUrl && !pdfName">
             <svg class="w-8 h-8 mx-auto mb-3 text-stone" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
             <p class="text-stone text-sm">点击或拖拽上传图片 / PDF</p>
+            <p class="text-silver text-xs mt-1">上传后自动识别题目内容</p>
           </div>
           <div v-else-if="previewUrl" class="relative">
             <img :src="previewUrl" class="max-h-48 mx-auto rounded-container" />
@@ -168,7 +178,7 @@ const fileInput = ref<HTMLInputElement>()
 const dragOver = ref(false)
 const previewUrl = ref('')
 const pdfName = ref('')
-const uploadedFileUrl = ref('')
+const isParsing = ref(false)
 
 const triggerFileInput = () => {
   fileInput.value?.click()
@@ -194,35 +204,59 @@ const processFile = async (file: File) => {
     return
   }
 
+  isParsing.value = true
   const formData = new FormData()
   formData.append('file', file)
 
   try {
-    const res = await client.post('/aptitude/upload', formData, {
+    const res = await client.post('/aptitude/parse', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    uploadedFileUrl.value = res.data.url
+    const data = res.data
 
+    // 自动填充表单
+    if (data.question_text) form.question_text = data.question_text
+    if (data.options) {
+      for (const [key, val] of Object.entries(data.options)) {
+        if (form.options[key] !== undefined && val) {
+          form.options[key] = val as string
+        }
+      }
+    }
+    if (data.correct_answer) form.correct_answer = data.correct_answer
+    if (data.question_type && questionTypes.includes(data.question_type)) {
+      form.question_type = data.question_type
+    }
+    if (data.difficulty) form.difficulty = data.difficulty
+
+    // 设置文件预览
     if (file.type.startsWith('image/')) {
       previewUrl.value = URL.createObjectURL(file)
-      form.question_image_url = res.data.url
+      form.question_image_url = data.file_url || ''
       form.question_pdf_url = ''
       pdfName.value = ''
     } else {
       pdfName.value = file.name
-      form.question_pdf_url = res.data.url
+      form.question_pdf_url = data.file_url || ''
       form.question_image_url = ''
       previewUrl.value = ''
     }
   } catch (err: any) {
-    alert(err.response?.data?.detail || '上传失败')
+    alert(err.response?.data?.detail || 'AI 解析失败，请手动输入')
+    // 回退到只显示预览
+    if (file.type.startsWith('image/')) {
+      previewUrl.value = URL.createObjectURL(file)
+    } else {
+      pdfName.value = file.name
+    }
+  } finally {
+    isParsing.value = false
   }
 }
 
 const clearFile = () => {
   previewUrl.value = ''
   pdfName.value = ''
-  uploadedFileUrl.value = ''
   form.question_image_url = ''
   form.question_pdf_url = ''
   if (fileInput.value) fileInput.value.value = ''
