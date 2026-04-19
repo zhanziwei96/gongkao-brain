@@ -5,30 +5,44 @@
     </h1>
     <p class="text-stone text-lg mb-12">今日目标：行测 80 分</p>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
       <div class="bg-snow border border-light-gray rounded-container p-6">
         <p class="text-stone text-sm mb-2">总题目数</p>
-        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.total }}</p>
+        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.total_questions }}</p>
+      </div>
+      <div class="bg-snow border border-light-gray rounded-container p-6">
+        <p class="text-stone text-sm mb-2">答题次数</p>
+        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.total_attempts }}</p>
       </div>
       <div class="bg-snow border border-light-gray rounded-container p-6">
         <p class="text-stone text-sm mb-2">错题数</p>
-        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.mistakes }}</p>
+        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.mistake_count }}</p>
       </div>
       <div class="bg-snow border border-light-gray rounded-container p-6">
         <p class="text-stone text-sm mb-2">正确率</p>
-        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.accuracy }}%</p>
+        <p class="font-display text-3xl font-medium text-pure-black">{{ stats.accuracy_rate }}%</p>
       </div>
     </div>
 
     <div class="bg-pure-white border border-light-gray rounded-container p-6 mb-8">
-      <h2 class="font-display text-2xl font-medium text-pure-black mb-6" style="line-height: 1.11">各模块进度</h2>
+      <h2 class="font-display text-2xl font-medium text-pure-black mb-6" style="line-height: 1.11">
+        各模块正确率
+      </h2>
       <div class="space-y-4">
-        <div v-for="mod in modules" :key="mod.name" class="flex items-center gap-4">
+        <div v-for="mod in stats.module_stats" :key="mod.name" class="flex items-center gap-4">
           <span class="w-24 text-sm text-near-black">{{ mod.name }}</span>
           <div class="flex-1 h-2 bg-light-gray rounded-pill overflow-hidden">
-            <div class="h-full bg-pure-black rounded-pill" :style="{ width: mod.rate + '%' }"></div>
+            <div
+              class="h-full bg-pure-black rounded-pill transition-all duration-500"
+              :style="{ width: mod.rate + '%' }"
+            />
           </div>
-          <span class="w-12 text-right text-sm text-stone">{{ mod.rate }}%</span>
+          <span class="w-20 text-right text-sm text-stone">
+            {{ mod.correct_count }}/{{ mod.attempt_count }}
+          </span>
+          <span class="w-12 text-right text-sm text-near-black font-medium">
+            {{ mod.rate }}%
+          </span>
         </div>
       </div>
     </div>
@@ -51,16 +65,50 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, onMounted, onUnmounted } from 'vue'
+import client from '../api/client'
 
-const stats = reactive({ total: 0, mistakes: 0, accuracy: 0 })
+interface ModuleStat {
+  name: string
+  question_count: number
+  attempt_count: number
+  correct_count: number
+  rate: number
+}
 
-const modules = [
-  { name: '政治理论', rate: 0 },
-  { name: '常识判断', rate: 0 },
-  { name: '言语理解', rate: 0 },
-  { name: '数量关系', rate: 0 },
-  { name: '判断推理', rate: 0 },
-  { name: '资料分析', rate: 0 },
-]
+interface Stats {
+  total_questions: number
+  total_attempts: number
+  correct_count: number
+  mistake_count: number
+  accuracy_rate: number
+  module_stats: ModuleStat[]
+}
+
+const stats = reactive<Stats>({
+  total_questions: 0,
+  total_attempts: 0,
+  correct_count: 0,
+  mistake_count: 0,
+  accuracy_rate: 0,
+  module_stats: []
+})
+
+const fetchStats = async () => {
+  try {
+    const res = await client.get('/aptitude/stats')
+    Object.assign(stats, res.data)
+  } catch (err) {
+    console.error('获取统计数据失败', err)
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+  window.addEventListener('aptitude-stats-updated', fetchStats)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('aptitude-stats-updated', fetchStats)
+})
 </script>

@@ -64,6 +64,7 @@ class AptitudeQuestionList(BaseModel):
 class AptitudeAttemptBase(BaseModel):
     user_answer: str
     time_spent_seconds: Optional[int] = None
+    mistake_reason: Optional[str] = None
 
 
 class AptitudeAttemptCreate(AptitudeAttemptBase):
@@ -80,6 +81,15 @@ class AptitudeAttemptResponse(AptitudeAttemptBase):
 
     class Config:
         from_attributes = True
+
+
+class AptitudeStats(BaseModel):
+    total_questions: int
+    total_attempts: int
+    correct_count: int
+    mistake_count: int
+    accuracy_rate: int  # 百分比
+    module_stats: List[Dict[str, Any]]
 
 
 class ChatMessage(BaseModel):

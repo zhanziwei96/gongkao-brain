@@ -4,6 +4,7 @@ import RegisterView from '../views/RegisterView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import AptitudeQuestionList from '../views/AptitudeQuestionList.vue'
 import AptitudeQuestionForm from '../views/AptitudeQuestionForm.vue'
+import AptitudeQuestionDetail from '../views/AptitudeQuestionDetail.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: '/', component: DashboardView, meta: { requiresAuth: true } },
     { path: '/aptitude/questions', component: AptitudeQuestionList, meta: { requiresAuth: true } },
     { path: '/aptitude/questions/new', component: AptitudeQuestionForm, meta: { requiresAuth: true } },
+    { path: '/aptitude/questions/:id', component: AptitudeQuestionDetail, meta: { requiresAuth: true } },
     { path: '/aptitude/questions/:id/edit', component: AptitudeQuestionForm, meta: { requiresAuth: true } },
   ]
 })

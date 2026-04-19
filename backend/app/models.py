@@ -50,6 +50,7 @@ class AptitudeAttempt(Base):
     time_spent_seconds = Column(Integer)
     attempt_date = Column(DateTime, default=datetime.utcnow)
     is_mistake = Column(Boolean, default=False)
+    mistake_reason = Column(Text)
 
     user = relationship("User", back_populates="aptitude_attempts")
     question = relationship("AptitudeQuestion", back_populates="attempts")

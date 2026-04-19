@@ -4,12 +4,13 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import AptitudeQuestion, AptitudeAttempt, User
 from app.schemas import (
     AptitudeQuestionCreate, AptitudeQuestionResponse, AptitudeQuestionList,
-    AptitudeAttemptCreate, AptitudeAttemptResponse
+    AptitudeAttemptCreate, AptitudeAttemptResponse, AptitudeStats
 )
 
 router = APIRouter()
@@ -104,6 +105,20 @@ def list_questions(
     query = db.query(AptitudeQuestion).filter(AptitudeQuestion.user_id == current_user.id)
     if question_type:
         query = query.filter(AptitudeQuestion.question_type == question_type)
+    if is_mistake is not None:
+        # 先查出有/无错题记录的 question_id 列表
+        mistake_question_ids = db.query(AptitudeAttempt.question_id).filter(
+            AptitudeAttempt.user_id == current_user.id,
+            AptitudeAttempt.is_mistake == True
+        ).distinct().all()
+        mistake_ids = [row[0] for row in mistake_question_ids]
+
+        if is_mistake:
+            # 只看错题
+            query = query.filter(AptitudeQuestion.id.in_(mistake_ids))
+        else:
+            # 只看非错题（包括未作答的）
+            query = query.filter(~AptitudeQuestion.id.in_(mistake_ids))
     total = query.count()
     items = query.order_by(AptitudeQuestion.created_at.desc()).offset(skip).limit(limit).all()
     return {"items": items, "total": total}
@@ -201,3 +216,62 @@ def list_attempts(
     if question_id:
         query = query.filter(AptitudeAttempt.question_id == question_id)
     return query.order_by(AptitudeAttempt.attempt_date.desc()).all()
+
+
+@router.get("/stats", response_model=AptitudeStats)
+def get_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 总题目数
+    total_questions = db.query(AptitudeQuestion).filter(
+        AptitudeQuestion.user_id == current_user.id
+    ).count()
+
+    # 答题记录统计
+    attempts = db.query(AptitudeAttempt).filter(
+        AptitudeAttempt.user_id == current_user.id
+    )
+    total_attempts = attempts.count()
+    correct_count = attempts.filter(AptitudeAttempt.is_correct == True).count()
+    mistake_count = attempts.filter(AptitudeAttempt.is_mistake == True).count()
+
+    # 正确率（基于有答题记录的题目）
+    accuracy_rate = round(correct_count / total_attempts * 100) if total_attempts > 0 else 0
+
+    # 各模块统计：按题型分组，统计每类的答题数和正确数
+    question_types = ['政治理论', '常识判断', '言语理解', '数量关系', '判断推理', '资料分析']
+    module_stats = []
+
+    for qt in question_types:
+        # 该题型的题目数量
+        q_count = db.query(AptitudeQuestion).filter(
+            AptitudeQuestion.user_id == current_user.id,
+            AptitudeQuestion.question_type == qt
+        ).count()
+
+        # 该题型的答题记录
+        mod_attempts = db.query(AptitudeAttempt).join(AptitudeQuestion).filter(
+            AptitudeAttempt.user_id == current_user.id,
+            AptitudeQuestion.question_type == qt
+        )
+        mod_total = mod_attempts.count()
+        mod_correct = mod_attempts.filter(AptitudeAttempt.is_correct == True).count()
+        mod_rate = round(mod_correct / mod_total * 100) if mod_total > 0 else 0
+
+        module_stats.append({
+            "name": qt,
+            "question_count": q_count,
+            "attempt_count": mod_total,
+            "correct_count": mod_correct,
+            "rate": mod_rate
+        })
+
+    return {
+        "total_questions": total_questions,
+        "total_attempts": total_attempts,
+        "correct_count": correct_count,
+        "mistake_count": mistake_count,
+        "accuracy_rate": accuracy_rate,
+        "module_stats": module_stats
+    }
